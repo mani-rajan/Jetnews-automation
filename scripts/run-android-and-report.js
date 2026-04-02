@@ -23,3 +23,4 @@ if (reportRun.status !== 0) {
 
 process.exit(wdioRun.status ?? 1);
 
+

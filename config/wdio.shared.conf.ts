@@ -2,8 +2,8 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 const screenshotDir = join(process.cwd(), 'screenshots');
-const cucumberJsonDir = join(process.cwd(), 'reports', 'cucumber-json');
-const allureResultsDir = join(process.cwd(), 'allure-results');
+const cucumberJsonDir = process.env.CUCUMBER_JSON_DIR ?? join(process.cwd(), 'reports', 'cucumber-json');
+const allureResultsDir = process.env.ALLURE_RESULTS_DIR ?? join(process.cwd(), 'allure-results');
 const appiumPort = Number(process.env.APPIUM_PORT ?? 4723);
 const uiWaitTimeout = Number(process.env.UI_WAIT_TIMEOUT ?? 15000);
 
@@ -39,6 +39,10 @@ function safeName(value: string): string {
     return value.replace(/[^a-zA-Z0-9_.-]/g, '_');
 }
 
+function shouldCloseAppOnComplete(): boolean {
+    return process.env.MULTI_DEVICE === 'true' || process.env.CLOSE_APP_ON_COMPLETE === 'true';
+}
+
 export const sharedConfig: Partial<WebdriverIO.Config> = {
     runner: 'local',
     hostname: '127.0.0.1',
@@ -50,7 +54,7 @@ export const sharedConfig: Partial<WebdriverIO.Config> = {
     waitforTimeout: uiWaitTimeout,
     reporters: [
         'spec',
-        ['allure', { outputDir: 'allure-results' }],
+        ['allure', { outputDir: allureResultsDir }],
         [
             'cucumberjs-json',
             {
@@ -63,6 +67,7 @@ export const sharedConfig: Partial<WebdriverIO.Config> = {
     ],
     onPrepare: function () {
         // Clean stale artefacts so each run's reports only contain current output.
+        // These dirs can be process-specific for concurrent two-emulator runs.
         rmSync(cucumberJsonDir, { recursive: true, force: true });
         rmSync(allureResultsDir, { recursive: true, force: true });
     },
@@ -72,7 +77,25 @@ export const sharedConfig: Partial<WebdriverIO.Config> = {
         timeout: Number(process.env.CUCUMBER_TIMEOUT ?? 60000),
         failFast: false,
         strict: true,
-        tags: process.env.TAGS ?? 'not @skip'
+        tags: process.env.TAGS ?? 'not @skip',
+        ...(process.env.CUCUMBER_NAME ? { name: [process.env.CUCUMBER_NAME] } : {})
+    },
+    after: async function () {
+        if (!shouldCloseAppOnComplete()) {
+            return;
+        }
+
+        const appPackage = process.env.ANDROID_APP_PACKAGE ?? 'com.example.jetnews';
+
+        try {
+            await driver.terminateApp(appPackage);
+            console.log(`[wdio.shared] Closed app ${appPackage} after execution.`);
+        }
+        catch (error) {
+            console.warn(
+                `[wdio.shared] Could not close app ${appPackage} after execution: ${String((error as Error)?.message ?? error)}`
+            );
+        }
     },
     afterScenario: async function (_world: any, result: any) {
         if (!result?.error) {
@@ -92,4 +115,3 @@ export const sharedConfig: Partial<WebdriverIO.Config> = {
         await driver.saveScreenshot(join(screenshotDir, fileName));
     }
 };
-

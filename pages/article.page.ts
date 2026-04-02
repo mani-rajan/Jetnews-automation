@@ -18,7 +18,7 @@ class ArticlePage {
     }
 
     get bookmarkButton() {
-        return $('//*[@content-desc="Add to favorites"]');
+        return $('//android.widget.CheckBox');
     }
 
     get likeButton() {
@@ -70,7 +70,7 @@ class ArticlePage {
     }
 
     async clickBookmark() {
-        await this.bookmarkButton.waitForDisplayed();
+            await this.bookmarkButton.waitForDisplayed();
         await this.bookmarkButton.click();
     }
 

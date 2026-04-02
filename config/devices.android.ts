@@ -1,4 +1,9 @@
 const androidAppPath = process.env.APP_PATH_ANDROID ?? 'D:/mobile-automation/apps/jetnews-assessment-debug.apk';
+const androidAppPackage = process.env.ANDROID_APP_PACKAGE ?? 'com.example.jetnews';
+const androidAppActivity = process.env.ANDROID_APP_ACTIVITY ?? 'com.example.jetnews.ui.MainActivity';
+const androidAppWaitActivity =
+    process.env.ANDROID_APP_WAIT_ACTIVITY ??
+    'com.example.jetnews.ui.MainActivity,com.example.jetnews.MainActivity,com.example.jetnews.ui.*,com.example.jetnews.*';
 
 /**
  * When USE_INSTALLED_APP=true the app is already on the device.
@@ -20,9 +25,9 @@ export const androidCapabilities: WebdriverIO.Capabilities[] = [
         'appium:udid': process.env.ANDROID_UDID_1 ?? process.env.ANDROID_DEVICE_1 ?? 'emulator-5554',
         'appium:platformVersion': process.env.ANDROID_PLATFORM_VERSION_1 ?? '11',
         'appium:automationName': 'UiAutomator2',
-        'appium:appPackage': process.env.ANDROID_APP_PACKAGE ?? 'com.example.jetnews',
-        'appium:appActivity': process.env.ANDROID_APP_ACTIVITY ?? 'com.example.jetnews.ui.MainActivity',
-        'appium:appWaitActivity': process.env.ANDROID_APP_WAIT_ACTIVITY ?? 'com.example.jetnews.ui.MainActivity,com.example.jetnews.ui.*',
+        'appium:appPackage': androidAppPackage,
+        'appium:appActivity': androidAppActivity,
+        'appium:appWaitActivity': androidAppWaitActivity,
         'appium:appWaitDuration': Number(process.env.ANDROID_APP_WAIT_DURATION ?? 120000),
         'appium:androidInstallTimeout': Number(process.env.ANDROID_INSTALL_TIMEOUT ?? 180000),
         'appium:systemPort': Number(process.env.ANDROID_SYSTEM_PORT_1 ?? 8200),
@@ -37,9 +42,9 @@ export const androidCapabilities: WebdriverIO.Capabilities[] = [
         'appium:udid': process.env.ANDROID_UDID_2 ?? process.env.ANDROID_DEVICE_2 ?? 'emulator-5556',
         'appium:platformVersion': process.env.ANDROID_PLATFORM_VERSION_2 ?? '11',
         'appium:automationName': 'UiAutomator2',
-        'appium:appPackage': process.env.ANDROID_APP_PACKAGE ?? 'com.example.jetnews',
-        'appium:appActivity': process.env.ANDROID_APP_ACTIVITY ?? 'com.example.jetnews.ui.MainActivity',
-        'appium:appWaitActivity': process.env.ANDROID_APP_WAIT_ACTIVITY ?? 'com.example.jetnews.ui.MainActivity,com.example.jetnews.ui.*',
+        'appium:appPackage': androidAppPackage,
+        'appium:appActivity': androidAppActivity,
+        'appium:appWaitActivity': androidAppWaitActivity,
         'appium:appWaitDuration': Number(process.env.ANDROID_APP_WAIT_DURATION ?? 120000),
         'appium:androidInstallTimeout': Number(process.env.ANDROID_INSTALL_TIMEOUT ?? 180000),
         'appium:systemPort': Number(process.env.ANDROID_SYSTEM_PORT_2 ?? 8201),

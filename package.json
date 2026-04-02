@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "e2e": "wdio run config/wdio.android.conf.ts",
-    "bdd:android": "wdio run config/wdio.android.conf.ts",
+    "bdd:android": "node scripts/run-android-and-report.js",
+    "bdd:android:run": "wdio run config/wdio.android.conf.ts",
     "bdd:android:parallel": "cross-env MAX_INSTANCES=2 wdio run config/wdio.android.conf.ts",
     "bdd:android:multidevice": "cross-env MULTI_DEVICE=true MAX_INSTANCES=2 REQUIRE_ALL_DEVICES=true USE_INSTALLED_APP=true wdio run config/wdio.android.conf.ts",
     "bdd:android:multidevice:oneshot": "cross-env USE_INSTALLED_APP=true powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-android-multidevice.ps1",
@@ -16,10 +17,10 @@
     "report:cucumber": "node scripts/generate-cucumber-report.js",
     "report:allure": "allure generate allure-results --clean -o reports/allure-html",
     "report:allure:open": "allure open reports/allure-html",
-    "bdd:android:report": "npm run bdd:android && npm run report:cucumber",
+    "bdd:android:report": "npm run bdd:android:run && npm run report:cucumber",
     "bdd:android:parallel:report": "npm run bdd:android:parallel && npm run report:cucumber",
-    "bdd:android:report:allure": "npm run bdd:android && npm run report:allure",
-    "bdd:android:two-emulators:report": "npm run bdd:android:two-emulators && npm run report:cucumber",
+    "bdd:android:report:allure": "npm run bdd:android:run && npm run report:allure",
+    "bdd:android:two-emulators:report": "node scripts/run-two-emulators-and-report.js",
     "bdd:android:multidevice:report": "npm run bdd:android:multidevice && npm run report:cucumber"
   },
   "keywords": [],

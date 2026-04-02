@@ -47,6 +47,39 @@ function Get-ConnectedDevices([string]$AdbPath) {
         ForEach-Object { ($_ -split "`t")[0] }
 }
 
+function Get-AndroidAppPackage {
+    if ($env:ANDROID_APP_PACKAGE) {
+        return $env:ANDROID_APP_PACKAGE
+    }
+
+    return 'com.example.jetnews'
+}
+
+function Force-Stop-App {
+    param(
+        [string]$AdbPath,
+        [string]$Udid,
+        [string]$AppPackage
+    )
+
+    if (-not $Udid) {
+        return
+    }
+
+    try {
+        & $AdbPath -s $Udid shell am force-stop $AppPackage | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Closed app $AppPackage on $Udid"
+        }
+        else {
+            Write-Warning "Could not close app $AppPackage on $Udid (exit code $LASTEXITCODE)."
+        }
+    }
+    catch {
+        Write-Warning "Could not close app ${AppPackage} on ${Udid}: $($_.Exception.Message)"
+    }
+}
+
 function Wait-ForAdditionalDevices {
     param(
         [string]$AdbPath,
@@ -69,9 +102,12 @@ function Wait-ForAdditionalDevices {
 }
 
 $adbPath = Get-AdbPath
+$appPackage = Get-AndroidAppPackage
 $baselineDevices = Get-ConnectedDevices -AdbPath $adbPath
 $newDevices = @()
 $startedProcesses = @()
+$udid1 = $null
+$udid2 = $null
 
 try {
     if (-not $SkipStart) {
@@ -114,6 +150,9 @@ try {
     }
 }
 finally {
+    Force-Stop-App -AdbPath $adbPath -Udid $udid1 -AppPackage $appPackage
+    Force-Stop-App -AdbPath $adbPath -Udid $udid2 -AppPackage $appPackage
+
     if ($Cleanup -and $startedProcesses.Count -gt 0) {
         foreach ($proc in $startedProcesses) {
             if ($proc -and -not $proc.HasExited) {

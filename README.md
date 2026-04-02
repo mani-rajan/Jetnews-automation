@@ -1,5 +1,7 @@
 # Mobile Automation (WDIO + Appium + Cucumber)
 
+For execution-focused setup and run instructions, see [`AUTOMATION_EXECUTION_README.md`](./AUTOMATION_EXECUTION_README.md).
+
 ## Prerequisites
 
 - Node.js ≥ 18
@@ -16,8 +18,11 @@ npm install
 ## Run tests
 
 ```powershell
-# Single device (default emulator-5554)
+# Single device + auto-generate Cucumber HTML report
 npm run bdd:android
+
+# Single device, WDIO only (no report generation)
+npm run bdd:android:run
 
 # 2 parallel workers on same device
 npm run bdd:android:parallel
@@ -25,7 +30,7 @@ npm run bdd:android:parallel
 # 2 devices, discovered automatically via adb
 npm run bdd:android:multidevice
 
-# One-shot: launch 2 AVDs → wait for adb → run tests
+# One-shot: launch 2 AVDs -> wait for adb -> run tests
 npm run bdd:android:multidevice:oneshot
 ```
 
@@ -37,8 +42,9 @@ Run tests **and** generate report in one command:
 
 ```powershell
 npm run bdd:android:report
-npm run bdd:android:two-emulators:report
 npm run bdd:android:multidevice:report
+npm run bdd:android:two-emulators:report
+
 ```
 
 Generate Cucumber HTML from the latest JSON files only:
@@ -83,7 +89,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-android-multidev
 ## Two-emulator parallel runner
 
 ```powershell
-# Uses emulator-5554 and emulator-5556 by default
+# Uses emulator-5554 and emulator-5556 by default.
+# Scenarios are sharded across both emulators (not duplicated).
 npm run bdd:android:two-emulators
 
 # Run + generate Cucumber HTML report
@@ -91,6 +98,10 @@ npm run bdd:android:two-emulators:report
 ```
 
 Both workers write independent logs to `logs/wdio-worker-{1,2}.{out,err}.log`.
+
+After `bdd:android:multidevice`, `bdd:android:multidevice:oneshot`, `bdd:android:two-emulators`, and `bdd:android:two-emulators:report`, the JetNews app is automatically closed on the involved Android emulators/devices.
+
+`bdd:android:multidevice` keeps the existing WDIO multi-capability behavior.
 
 ## iOS (future-ready)
 

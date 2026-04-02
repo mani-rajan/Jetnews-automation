@@ -6,6 +6,22 @@ const report = require('multiple-cucumber-html-reporter');
 const projectRoot = path.resolve(__dirname, '..');
 const jsonDir = path.join(projectRoot, 'reports', 'cucumber-json');
 const htmlDir = path.join(projectRoot, 'reports', 'cucumber-html');
+const mergedJsonDir = path.join(projectRoot, 'reports', 'cucumber-json-merged');
+
+function walkJsonFiles(rootDir) {
+    const results = [];
+    for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+        const fullPath = path.join(rootDir, entry.name);
+        if (entry.isDirectory()) {
+            results.push(...walkJsonFiles(fullPath));
+            continue;
+        }
+        if (entry.isFile() && entry.name.toLowerCase().endsWith('.json')) {
+            results.push(fullPath);
+        }
+    }
+    return results;
+}
 
 // ─── APK metadata via aapt2 ───────────────────────────────────────────────────
 
@@ -24,6 +40,64 @@ function resolveAapt2() {
         if (fs.existsSync(candidate)) return candidate;
     }
     return null;
+}
+
+function resolveAdbExecutable() {
+    if (process.env.ADB_PATH && fs.existsSync(process.env.ADB_PATH)) {
+        return process.env.ADB_PATH;
+    }
+
+    const sdkRoot = process.env.ANDROID_SDK_ROOT ?? process.env.ANDROID_HOME;
+    if (!sdkRoot) {
+        return process.platform === 'win32' ? 'adb.exe' : 'adb';
+    }
+
+    const candidate = path.join(sdkRoot, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb');
+    return fs.existsSync(candidate) ? candidate : (process.platform === 'win32' ? 'adb.exe' : 'adb');
+}
+
+function getConnectedAndroidDevices() {
+    try {
+        const output = execFileSync(resolveAdbExecutable(), ['devices'], { encoding: 'utf8' });
+        return output
+            .split(/\r?\n/)
+            .slice(1)
+            .map((line) => line.trim())
+            .filter((line) => line.endsWith('\tdevice'))
+            .map((line) => line.split('\t')[0]);
+    } catch {
+        return [];
+    }
+}
+
+function uniqueNonEmpty(values) {
+    return [...new Set(values.filter((value) => typeof value === 'string' && value.trim() !== ''))];
+}
+
+const connectedAndroidDevices = getConnectedAndroidDevices();
+
+function resolveDefaultDevice() {
+    return [
+        process.env.DEVICE_NAME,
+        process.env.ANDROID_UDID_1,
+        process.env.ANDROID_DEVICE_1,
+        process.env.IOS_DEVICE_1,
+        connectedAndroidDevices[0],
+        'emulator-5554'
+    ].find(Boolean);
+}
+
+function resolveReportDevices() {
+    return uniqueNonEmpty([
+        process.env.DEVICE_NAME,
+        process.env.ANDROID_UDID_1,
+        process.env.ANDROID_DEVICE_1,
+        process.env.ANDROID_UDID_2,
+        process.env.ANDROID_DEVICE_2,
+        process.env.IOS_DEVICE_1,
+        process.env.IOS_DEVICE_2,
+        ...connectedAndroidDevices
+    ]);
 }
 
 function extractApkInfo(apkPath) {
@@ -57,10 +131,7 @@ const metadata = {
         version: '3.x'
     },
     device:
-        process.env.DEVICE_NAME ??
-        process.env.ANDROID_DEVICE_1 ??
-        process.env.IOS_DEVICE_1 ??
-        'emulator-5554',
+        resolveDefaultDevice(),
     platform: {
         name:
             process.env.PLATFORM_NAME ??
@@ -81,9 +152,7 @@ if (!fs.existsSync(jsonDir)) {
     process.exit(1);
 }
 
-const jsonFiles = fs
-    .readdirSync(jsonDir)
-    .filter((file) => file.toLowerCase().endsWith('.json'));
+const jsonFiles = walkJsonFiles(jsonDir);
 
 if (!jsonFiles.length) {
     console.error(`[cucumber-report] No JSON files found in: ${jsonDir}`);
@@ -92,6 +161,8 @@ if (!jsonFiles.length) {
 }
 
 fs.mkdirSync(htmlDir, { recursive: true });
+fs.rmSync(mergedJsonDir, { recursive: true, force: true });
+fs.mkdirSync(mergedJsonDir, { recursive: true });
 
 // ─── Patch metadata in every feature object ───────────────────────────────────
 // Strategy: preserve any value already embedded by wdio-cucumberjs-json-reporter
@@ -99,20 +170,56 @@ fs.mkdirSync(htmlDir, { recursive: true });
 // "not known" / "No metadata.*" placeholder strings that the reporter writes
 // when it has no configured value.
 
-const PLACEHOLDER = /not known|No metadata\./i;
+const PLACEHOLDER = /not known|No metadata\.|unknown-device|^unknown$/i;
 
 function pick(existing, fallback) {
     return (existing && !PLACEHOLDER.test(String(existing))) ? existing : fallback;
+}
+
+function decodeEmbeddingText(embedding) {
+    if (!embedding || embedding.mime_type !== 'text/plain' || !embedding.data) {
+        return null;
+    }
+    try {
+        return Buffer.from(String(embedding.data), 'base64').toString('utf8');
+    } catch {
+        return null;
+    }
+}
+
+function inferRuntimeMetadata(feature) {
+    for (const element of feature.elements ?? []) {
+        for (const step of element.steps ?? []) {
+            for (const embedding of step.embeddings ?? []) {
+                const text = decodeEmbeddingText(embedding);
+                if (!text) {
+                    continue;
+                }
+                const match = text.match(/Executed on\s+([^\s]+)\s+\(([^)]+)\)\s+via Appium\s+([^\s]+)/i);
+                if (!match) {
+                    continue;
+                }
+
+                const device = match[1];
+                const platformTokens = match[2].trim().split(/\s+/);
+                const platformName = platformTokens[0] ?? null;
+                const platformVersion = platformTokens[1] ?? null;
+                return { device, platformName, platformVersion };
+            }
+        }
+    }
+
+    return { device: null, platformName: null, platformVersion: null };
 }
 
 let totalFeatures = 0;
 const devicesSeen = new Set();
 
 for (const file of jsonFiles) {
-    const filePath = path.join(jsonDir, file);
-    const features = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const features = JSON.parse(fs.readFileSync(file, 'utf8'));
     for (const feature of features) {
         const m = feature.metadata || {};
+        const inferred = inferRuntimeMetadata(feature);
         feature.metadata = {
             app: {
                 name:    pick(m.app?.name,        metadata.app.name),
@@ -122,28 +229,32 @@ for (const file of jsonFiles) {
                 name:    pick(m.browser?.name,    metadata.browser.name),
                 version: pick(m.browser?.version, metadata.browser.version)
             },
-            device:  pick(m.device,               metadata.device),
+            device:  pick(m.device,               inferred.device ?? metadata.device),
             platform: {
-                name:    pick(m.platform?.name,   metadata.platform.name),
-                version: pick(m.platform?.version, metadata.platform.version)
+                name:    pick(m.platform?.name,   inferred.platformName ?? metadata.platform.name),
+                version: pick(m.platform?.version, inferred.platformVersion ?? metadata.platform.version)
             }
         };
-        devicesSeen.add(feature.metadata.device);
+        if (!PLACEHOLDER.test(String(feature.metadata.device ?? ''))) {
+            devicesSeen.add(feature.metadata.device);
+        }
     }
-    fs.writeFileSync(filePath, JSON.stringify(features));
+    const relativeName = path.relative(jsonDir, file).replace(/[\\/]/g, '__');
+    const outputFile = path.join(mergedJsonDir, relativeName);
+    fs.writeFileSync(outputFile, JSON.stringify(features));
     totalFeatures += features.length;
 }
 console.log(
     `[cucumber-report] Metadata applied to ${totalFeatures} feature(s) in ${jsonFiles.length} file(s).` +
     `\n  App:     ${metadata.app.name} v${metadata.app.version}` +
-    `\n  Devices: ${[...devicesSeen].join(', ')}` +
+    `\n  Devices: ${(devicesSeen.size ? [...devicesSeen] : resolveReportDevices()).join(', ')}` +
     `\n  Platform: ${metadata.platform.name} ${metadata.platform.version}`
 );
 
 // ─── Generate HTML report ─────────────────────────────────────────────────────
 
 report.generate({
-    jsonDir,
+    jsonDir: mergedJsonDir,
     reportPath: htmlDir,
     pageTitle:   'JetNews Cucumber Report',
     reportName:  'JetNews WDIO BDD Execution',
@@ -153,7 +264,7 @@ report.generate({
         data: [
             { label: 'Generated At', value: new Date().toISOString() },
             { label: 'App',          value: `${metadata.app.name} v${metadata.app.version}` },
-            { label: 'Device(s)',    value: [...devicesSeen].join(' | ') },
+            { label: 'Device(s)',    value: (devicesSeen.size ? [...devicesSeen] : resolveReportDevices()).join(' | ') || metadata.device },
             { label: 'OS',           value: `${metadata.platform.name} ${metadata.platform.version}` },
             { label: 'Appium',       value: metadata.browser.version },
             { label: 'JSON Source',  value: jsonDir }
