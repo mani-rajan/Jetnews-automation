@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build / compile output
+dist/
+build/
+
+# Test result artefacts
+allure-results/
+reports/cucumber-json/
+reports/cucumber-html/
+reports/allure-html/
+screenshots/
+logs/
+
+# Appium runtime log
+appium.log
+
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
